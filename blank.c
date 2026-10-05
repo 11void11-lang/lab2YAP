@@ -121,11 +121,23 @@ static void mark_leading(void)
     is_leading[id] = 1;
 }
 
-/*  НОВОЕ: порядок букв и границы отсечения  */
+/*  порядок букв и границы отсечения  */
 
 static void compute_order(void)
 {
     for (int i = 0; i < n_letters; i++) order[i] = i;
+
+    /*  буквы с большим |coeff| перебираем первыми —
+        отсечение срабатывает раньше  */
+    for (int i = 1; i < n_letters; i++) {
+        int key = order[i];
+        int j = i - 1;
+        while (j >= 0 && labs((long)coeff[order[j]]) < labs((long)coeff[key])) {
+            order[j + 1] = order[j];
+            j--;
+        }
+        order[j + 1] = key;
+    }
 }
 
 static void compute_suffix_max(void)
