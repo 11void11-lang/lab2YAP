@@ -23,8 +23,7 @@ static char  result[MAX_LEN];
 
 /*  НОВОЕ: порядок перебора букв и суффиксные границы  */
 
-static int       order[MAX_LETTERS];
-static long long suffix_max[MAX_LETTERS + 1];
+static int order[MAX_LETTERS];
 
 /*  Парсинг входной строки  */
 
@@ -140,11 +139,41 @@ static void compute_order(void)
     }
 }
 
-static void compute_suffix_max(void)
+/*  пессимистичная граница по всем оставшимся буквам.
+    Не зависит от порядка, поэтому order[] можно переставлять  */
+
+static long long remaining_max(int k)
 {
-    suffix_max[n_letters] = 0;
-    for (int k = n_letters - 1; k >= 0; k--)
-        suffix_max[k] = suffix_max[k + 1] + 9LL * labs((long)coeff[order[k]]);
+    long long s = 0;
+    for (int j = k; j < n_letters; j++)
+        s += 9LL * labs((long)coeff[order[j]]);
+    return s;
+}
+
+/*  MRV — выбираем букву с наименьшим числом
+    допустимых цифр и ставим её на позицию k  */
+
+static int pick_letter(int k)
+{
+    int best = k, best_cnt = 11;
+    for (int j = k; j < n_letters; j++) {
+        int i = order[j];
+        int cnt = 0;
+        for (int d = 0; d <= 9; d++) {
+            if (used_digit[d]) continue;
+            if (d == 0 && is_leading[i]) continue;
+            cnt++;
+        }
+        if (cnt < best_cnt) {
+            best_cnt = cnt;
+            best = j;
+            if (cnt == 0) break;
+        }
+    }
+    int tmp = order[k];
+    order[k] = order[best];
+    order[best] = tmp;
+    return order[k];
 }
 
 /*  Число из слова  */
@@ -159,7 +188,7 @@ static long long word_to_num(const char* w)
     return v;
 }
 
-/*  ОПТИМИЗАЦИЯ: проверка арифметики столбика для младших разрядов,
+/*  проверка арифметики столбика для младших разрядов,
     в которых все буквы уже назначены  */
 
 static int check_low_columns(void)
@@ -212,11 +241,11 @@ static int dfs(int k, long long partial)
         return partial == 0;
     }
 
-    /*  ОПТИМИЗАЦИЯ: если оставшиеся буквы физически не могут
+    /*  если оставшиеся буквы физически не могут
         скомпенсировать partial до нуля — ветка мертва  */
-    if (labs(partial) > suffix_max[k]) return 0;
+    if (labs(partial) > remaining_max(k)) return 0;
 
-    int i = order[k];
+    int i = pick_letter(k);
     for (int d = 0; d <= 9; d++) {
         if (used_digit[d]) continue;
         if (d == 0 && is_leading[i]) continue;
@@ -249,7 +278,7 @@ int solve_rebus(const char* rebus)
     compute_coeffs();
     mark_leading();
     compute_order();        /* НОВОЕ */
-    compute_suffix_max();   /* НОВОЕ */
+    
     for (int i = 0; i < n_letters; i++) digit[i] = -1;
     for (int d = 0; d < 10; d++) used_digit[d] = 0;
 
