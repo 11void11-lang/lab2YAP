@@ -1,4 +1,4 @@
-﻿#define _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -21,6 +21,11 @@ static char  addends[MAX_WORDS][MAX_LEN];
 static int   n_addends;
 static char  result[MAX_LEN];
 
+/*  НОВОЕ: порядок перебора букв и суффиксные границы  */
+
+static int       order[MAX_LETTERS];
+static long long suffix_max[MAX_LETTERS + 1];
+
 /*  Парсинг входной строки  */
 
 static int parse(const char* rebus)
@@ -29,21 +34,18 @@ static int parse(const char* rebus)
     strncpy(buf, rebus, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
 
-    /* Разделяем по '=' */
     char* eq = strchr(buf, '=');
     if (!eq) return 0;
     *eq = '\0';
     char* left = buf;
     char* right = eq + 1;
 
-    /* Правая часть */
     while (*right == ' ') right++;
     int rlen = strlen(right);
     while (rlen > 0 && (right[rlen - 1] == ' ' || right[rlen - 1] == '\n')) rlen--;
     right[rlen] = '\0';
     strcpy(result, right);
 
-    /* Левая часть: разбиваем по '+' */
     n_addends = 0;
     char* p = left;
     while (*p) {
@@ -119,45 +121,54 @@ static void mark_leading(void)
     is_leading[id] = 1;
 }
 
+/*  НОВОЕ: порядок букв и границы отсечения  */
+
+static void compute_order(void)
+{
+    for (int i = 0; i < n_letters; i++) order[i] = i;
+}
+
+static void compute_suffix_max(void)
+{
+    suffix_max[n_letters] = 0;
+    for (int k = n_letters - 1; k >= 0; k--)
+        suffix_max[k] = suffix_max[k + 1] + 9LL * labs((long)coeff[order[k]]);
+}
+
 /*  Число из слова  */
 
 static long long word_to_num(const char* w)
 {
     long long v = 0;
-    for (char* p = w; *p; p++) {
+    for (const char* p = w; *p; p++) {
         int id = find_letter(*p);
         v = v * 10 + digit[id];
     }
     return v;
 }
 
-/*  Рекурсивный перебор  */
-
-static int dfs(int k, long long partial);
-
-static int try_assign(int k, long long partial, int i, int d)
-{
-    digit[i] = d;
-    used_digit[d] = 1;
-    long long np = partial + (long long)coeff[i] * d;
-    int ok = dfs(k + 1, np);
-    if (!ok) {
-        used_digit[d] = 0;
-        digit[i] = -1;
-    }
-    return ok;
-}
+/*  Рекурсивный перебор с отсечением по частичной сумме  */
 
 static int dfs(int k, long long partial)
 {
     if (k == n_letters) {
         return partial == 0;
     }
-    int i = k;
+
+    /*  ОПТИМИЗАЦИЯ: если оставшиеся буквы физически не могут
+        скомпенсировать partial до нуля — ветка мертва  */
+    if (labs(partial) > suffix_max[k]) return 0;
+
+    int i = order[k];
     for (int d = 0; d <= 9; d++) {
         if (used_digit[d]) continue;
         if (d == 0 && is_leading[i]) continue;
-        if (try_assign(k, partial, i, d)) return 1;
+
+        digit[i] = d;
+        used_digit[d] = 1;
+        if (dfs(k + 1, partial + (long long)coeff[i] * d)) return 1;
+        used_digit[d] = 0;
+        digit[i] = -1;
     }
     return 0;
 }
@@ -179,6 +190,8 @@ int solve_rebus(const char* rebus)
     collect_letters();
     compute_coeffs();
     mark_leading();
+    compute_order();        /* НОВОЕ */
+    compute_suffix_max();   /* НОВОЕ */
     for (int i = 0; i < n_letters; i++) digit[i] = -1;
     for (int d = 0; d < 10; d++) used_digit[d] = 0;
 
@@ -198,7 +211,6 @@ int main(void)
 
     if (!fgets(line, sizeof(line), stdin)) return 1;
 
-    /* Убираем завершающий '\n' */
     size_t len = strlen(line);
     while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
         line[--len] = '\0';
