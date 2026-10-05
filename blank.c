@@ -159,6 +159,51 @@ static long long word_to_num(const char* w)
     return v;
 }
 
+/*  ОПТИМИЗАЦИЯ: проверка арифметики столбика для младших разрядов,
+    в которых все буквы уже назначены  */
+
+static int check_low_columns(void)
+{
+    int rlen = strlen(result);
+    int maxlen = rlen;
+    for (int w = 0; w < n_addends; w++) {
+        int l = strlen(addends[w]);
+        if (l > maxlen) maxlen = l;
+    }
+
+    int carry = 0;
+    for (int t = 0; t < maxlen; t++) {
+        int complete = 1;
+        int sum = carry;
+
+        for (int w = 0; w < n_addends; w++) {
+            int l = strlen(addends[w]);
+            if (t < l) {
+                int i = find_letter(addends[w][l - 1 - t]);
+                if (digit[i] == -1) { complete = 0; break; }
+                sum += digit[i];
+            }
+        }
+        if (!complete) break;
+
+        int res_digit = -1;
+        if (t < rlen) {
+            int ri = find_letter(result[rlen - 1 - t]);
+            if (digit[ri] == -1) complete = 0;
+            else res_digit = digit[ri];
+        }
+        if (!complete) break;
+
+        if (res_digit == -1) {
+            if (sum % 10 != 0) return 0;
+        } else {
+            if (sum % 10 != res_digit) return 0;
+        }
+        carry = sum / 10;
+    }
+    return 1;
+}
+
 /*  Рекурсивный перебор с отсечением по частичной сумме  */
 
 static int dfs(int k, long long partial)
@@ -178,7 +223,8 @@ static int dfs(int k, long long partial)
 
         digit[i] = d;
         used_digit[d] = 1;
-        if (dfs(k + 1, partial + (long long)coeff[i] * d)) return 1;
+        if (check_low_columns() &&
+            dfs(k + 1, partial + (long long)coeff[i] * d)) return 1;
         used_digit[d] = 0;
         digit[i] = -1;
     }
